@@ -20,13 +20,42 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 세션 상태 초기화
+# 데이터 저장 파일 경로
+DATA_DIR = "app_data"
+BUSINESS_CARDS_FILE = os.path.join(DATA_DIR, "business_cards.json")
+CONVERSATION_FILE = os.path.join(DATA_DIR, "conversation_history.json")
+
+# 데이터 디렉토리 생성
+os.makedirs(DATA_DIR, exist_ok=True)
+
+def save_data_to_file(data, filename):
+    """데이터를 JSON 파일로 저장"""
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        st.error(f"데이터 저장 실패: {str(e)}")
+        return False
+
+def load_data_from_file(filename, default_value):
+    """JSON 파일에서 데이터 로드"""
+    try:
+        if os.path.exists(filename):
+            with open(filename, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return default_value
+    except Exception as e:
+        st.warning(f"데이터 로드 실패: {str(e)}")
+        return default_value
+
+# 세션 상태 초기화 (파일에서 로드)
 if "business_cards" not in st.session_state:
-    st.session_state.business_cards = []
+    st.session_state.business_cards = load_data_from_file(BUSINESS_CARDS_FILE, [])
 if "pdf_docs" not in st.session_state:
     st.session_state.pdf_docs = None
 if "conversation_history" not in st.session_state:
-    st.session_state.conversation_history = []
+    st.session_state.conversation_history = load_data_from_file(CONVERSATION_FILE, [])
 
 # CSS 스타일
 st.markdown("""
@@ -79,22 +108,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def call_gpt_oss_api(prompt: str) -> str:
-    """GPT-OSS API 호출 - 여러 모델 시도 (Gemma 포함)"""
+    """AI API 호출 - 여러 모델 시도 (Gemma 포함)"""
     
-    # 다양한 모델들 (GPT-OSS + Gemma)
+    # 핵심 모델들 (GPT-OSS + Gemma + 기본)
     models = [
-        # GPT-OSS 모델들
+        # GPT-OSS 모델들 (우선순위)
         "openai/gpt-oss-20b",
         "openai/gpt-oss-120b",
-        # Gemma 모델들
+        # Gemma 모델들 (사용 가능한지 확인)
         "google/gemma-3-270m",
         "google/gemma-2b",
         "google/gemma-7b",
-        # 기타 대안 모델들
-        "microsoft/DialoGPT-medium",
-        "gpt2",
-        "EleutherAI/gpt-neo-125M",
-        "microsoft/DialoGPT-small"
+        # 기본 안정 모델
+        "microsoft/DialoGPT-medium"
     ]
     
     for model in models:
@@ -126,7 +152,19 @@ def call_gpt_oss_api(prompt: str) -> str:
                         "top_p": 0.9
                     }
                 }
+            elif "dialo" in model.lower():
+                # DialoGPT 모델용 프롬프트 형식
+                payload = {
+                    "inputs": prompt,
+                    "parameters": {
+                        "max_new_tokens": 300,
+                        "temperature": 0.7,
+                        "do_sample": True,
+                        "pad_token_id": 50256
+                    }
+                }
             else:
+                # 일반 GPT 모델들
                 payload = {
                     "inputs": prompt,
                     "parameters": {
@@ -163,7 +201,7 @@ def call_gpt_oss_api(prompt: str) -> str:
             st.warning(f"⚠️ {model}: {str(e)}")
             continue
     
-    # Hugging Face 실패시 Ollama 시도
+    # Hugging Face 실패시 Ollama 시도 (선택사항)
     st.info("🔄 Hugging Face 실패. Ollama Gemma 시도...")
     
     ollama_models = ["gemma3:270m", "gemma2:2b", "gemma2:7b"]
@@ -204,7 +242,7 @@ def call_gpt_oss_api(prompt: str) -> str:
     
     # 모든 모델 실패시 기본 응답
     st.error("❌ 모든 모델 실패.")
-    return "죄송합니다. 현재 GPT-OSS와 Gemma 모델들을 사용할 수 없습니다."
+    return "죄송합니다. 현재 AI 모델들을 사용할 수 없습니다. 잠시 후 다시 시도해주세요."
 
 def extract_business_card_info(image):
     """명함 이미지에서 정보 추출"""
@@ -347,16 +385,16 @@ def generate_answer(question: str, context: str) -> str:
         return f"답변 생성 중 오류: {str(e)}"
 
 # 메인 UI
-st.title("💼 GPT-OSS & Gemma Business Card OCR & PDF Assistant")
-st.markdown("**GPT-OSS + Gemma** - 명함 OCR과 PDF 질의응답 시스템")
+st.title("💼 AI Business Card OCR & PDF Assistant")
+st.markdown("**GPT-OSS + Gemma + 오픈소스 AI** - 명함 OCR과 PDF 질의응답 시스템")
 
 # 탭 생성
 tab1, tab2, tab3 = st.tabs(["📇 명함 OCR", "📄 PDF RAG", "💬 대화 기록"])
 
 with tab1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.header("📇 명함 OCR (GPT-OSS & Gemma)")
-    st.write("명함 이미지를 업로드하면 GPT-OSS 또는 Gemma가 정보를 추출합니다.")
+    st.header("📇 명함 OCR (AI)")
+    st.write("명함 이미지를 업로드하면 GPT-OSS, Gemma 또는 기타 AI가 정보를 추출합니다.")
     
     uploaded_image = st.file_uploader(
         "명함 이미지 업로드",
@@ -376,6 +414,9 @@ with tab1:
                     # 명함 정보를 세션에 저장
                     card_info["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     st.session_state.business_cards.append(card_info)
+                    
+                    # 파일에 영구 저장
+                    save_data_to_file(st.session_state.business_cards, BUSINESS_CARDS_FILE)
                     
                     # 결과 표시
                     st.markdown('<div class="business-card">', unsafe_allow_html=True)
@@ -422,8 +463,8 @@ with tab1:
 
 with tab2:
     st.markdown('<div class="pdf-section">', unsafe_allow_html=True)
-    st.header("📄 PDF RAG (GPT-OSS & Gemma)")
-    st.write("PDF를 업로드하고 질문하면 GPT-OSS 또는 Gemma가 답변합니다.")
+    st.header("📄 PDF RAG (AI)")
+    st.write("PDF를 업로드하고 질문하면 GPT-OSS, Gemma 또는 기타 AI가 답변합니다.")
     
     uploaded_pdf = st.file_uploader(
         "PDF 파일 업로드",
@@ -469,6 +510,9 @@ with tab2:
                 }
                 st.session_state.conversation_history.append(conversation_entry)
                 
+                # 파일에 영구 저장
+                save_data_to_file(st.session_state.conversation_history, CONVERSATION_FILE)
+                
                 # 답변 표시
                 st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.subheader("🤖 AI 답변")
@@ -501,9 +545,31 @@ with tab3:
         st.info("아직 AI 대화 기록이 없습니다.")
     
     # 대화 기록 초기화
-    if st.button("🗑️ 대화 기록 초기화"):
-        st.session_state.conversation_history = []
-        st.rerun()
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🗑️ 대화 기록 초기화"):
+            st.session_state.conversation_history = []
+            # 파일에서도 삭제
+            try:
+                if os.path.exists(CONVERSATION_FILE):
+                    os.remove(CONVERSATION_FILE)
+                st.success("대화 기록이 완전히 삭제되었습니다!")
+            except:
+                st.warning("파일 삭제에 실패했습니다.")
+            st.rerun()
+    
+    with col2:
+        if st.button("🗑️ 명함 데이터 초기화"):
+            st.session_state.business_cards = []
+            # 파일에서도 삭제
+            try:
+                if os.path.exists(BUSINESS_CARDS_FILE):
+                    os.remove(BUSINESS_CARDS_FILE)
+                st.success("명함 데이터가 완전히 삭제되었습니다!")
+            except:
+                st.warning("파일 삭제에 실패했습니다.")
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 # 사이드바 통계
@@ -527,18 +593,31 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # 데이터 관리 정보
+    st.header("💾 데이터 관리")
+    st.info(f"""
+    **📁 저장 위치:** `{DATA_DIR}/`
+    - 명함 데이터: `business_cards.json`
+    - 대화 기록: `conversation_history.json`
+    
+    **🔄 자동 저장:** 모든 데이터는 자동으로 파일에 저장됩니다.
+    **📱 영구 보존:** 브라우저를 닫아도 데이터가 유지됩니다.
+    """)
+    
+    st.markdown("---")
+    
     # 기능 설명
     st.header("🔧 AI 기능")
     st.write("""
     **📇 명함 OCR:**
     - 명함 이미지 업로드
-    - GPT-OSS/Gemma 정보 추출
+    - AI 정보 추출 (GPT-OSS, Gemma, DialoGPT)
     - 구조화된 데이터 저장
     
     **📄 PDF RAG:**
     - PDF 문서 업로드
     - 텍스트 청킹
-    - GPT-OSS/Gemma 기반 질의응답
+    - AI 기반 질의응답
     
     **💬 대화 기록:**
     - AI 질문-답변 히스토리
