@@ -1,6 +1,5 @@
 import os
 import streamlit as st
-from openai import OpenAI
 from PyPDF2 import PdfReader
 import numpy as np
 import time
@@ -15,30 +14,11 @@ from io import BytesIO
 
 # 페이지 설정
 st.set_page_config(
-    page_title="GPT-OSS Business Card OCR & PDF Assistant",
+    page_title="GPT-OSS Only Business Card OCR & PDF Assistant",
     page_icon="💼",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# OpenAI API 키 설정 (fallback용)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    key_candidates = [
-        os.path.join(os.path.dirname(__file__), "nocommit_key.txt"),
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "nocommit_key.txt"),
-    ]
-    for cand in key_candidates:
-        if os.path.isfile(cand):
-            try:
-                with open(cand, "r", encoding="utf-8") as f:
-                    OPENAI_API_KEY = f.read().strip()
-                break
-            except Exception:
-                pass
-
-# OpenAI 클라이언트 (fallback용)
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 # 세션 상태 초기화
 if "business_cards" not in st.session_state:
@@ -158,24 +138,9 @@ def call_gpt_oss_api(prompt: str) -> str:
             st.warning(f"⚠️ {model}: {str(e)}")
             continue
     
-    # 모든 GPT-OSS 모델 실패시 OpenAI fallback
-    st.error("❌ 모든 GPT-OSS 모델 실패. OpenAI fallback 사용...")
-    try:
-        if client:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=500,
-                temperature=0.3
-            )
-            return response.choices[0].message.content.strip()
-        else:
-            return "모든 API 호출에 실패했습니다."
-    except Exception as e:
-        return f"Fallback도 실패: {str(e)}"
+    # 모든 모델 실패시 기본 응답
+    st.error("❌ 모든 GPT-OSS 모델 실패.")
+    return "죄송합니다. 현재 GPT-OSS 모델들을 사용할 수 없습니다."
 
 def extract_business_card_info(image):
     """명함 이미지에서 정보 추출"""
@@ -318,15 +283,15 @@ def generate_answer(question: str, context: str) -> str:
         return f"답변 생성 중 오류: {str(e)}"
 
 # 메인 UI
-st.title("💼 GPT-OSS Business Card OCR & PDF Assistant")
-st.markdown("**GPT-OSS 강제 사용** - 명함 OCR과 PDF 질의응답 시스템")
+st.title("💼 GPT-OSS Only Business Card OCR & PDF Assistant")
+st.markdown("**GPT-OSS 전용** - 명함 OCR과 PDF 질의응답 시스템")
 
 # 탭 생성
 tab1, tab2, tab3 = st.tabs(["📇 명함 OCR", "📄 PDF RAG", "💬 대화 기록"])
 
 with tab1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.header("📇 명함 OCR (GPT-OSS)")
+    st.header("📇 명함 OCR (GPT-OSS Only)")
     st.write("명함 이미지를 업로드하면 GPT-OSS가 정보를 추출합니다.")
     
     uploaded_image = st.file_uploader(
@@ -393,7 +358,7 @@ with tab1:
 
 with tab2:
     st.markdown('<div class="pdf-section">', unsafe_allow_html=True)
-    st.header("📄 PDF RAG (GPT-OSS)")
+    st.header("📄 PDF RAG (GPT-OSS Only)")
     st.write("PDF를 업로드하고 질문하면 GPT-OSS가 답변합니다.")
     
     uploaded_pdf = st.file_uploader(
