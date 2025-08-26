@@ -388,10 +388,14 @@ def generate_answer(question: str, context: str) -> str:
 st.title("💼 AI Business Card OCR & PDF Assistant")
 st.markdown("**GPT-OSS + Gemma + 오픈소스 AI** - 명함 OCR과 PDF 질의응답 시스템")
 
-# 탭 생성
-tab1, tab2, tab3, tab4 = st.tabs(["📇 명함 OCR", "📄 PDF RAG", "🤖 AI 채팅", "💬 대화 기록"])
+# 기능 선택
+selected_function = st.selectbox(
+    "기능을 선택하세요:",
+    ["📇 명함 OCR", "📄 PDF RAG", "🤖 AI 채팅", "💬 대화 기록"],
+    index=0
+)
 
-with tab1:
+if selected_function == "📇 명함 OCR":
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("📇 명함 OCR (AI)")
     st.write("명함 이미지를 업로드하면 GPT-OSS, Gemma 또는 기타 AI가 정보를 추출합니다.")
@@ -461,7 +465,7 @@ with tab1:
                 st.json(card)
     st.markdown('</div>', unsafe_allow_html=True)
 
-with tab2:
+elif selected_function == "📄 PDF RAG":
     st.markdown('<div class="pdf-section">', unsafe_allow_html=True)
     st.header("📄 PDF RAG (AI)")
     st.write("PDF를 업로드하고 질문하면 GPT-OSS, Gemma 또는 기타 AI가 답변합니다.")
@@ -528,7 +532,7 @@ with tab2:
         st.info("📄 PDF를 먼저 업로드해주세요.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-with tab3:
+elif selected_function == "🤖 AI 채팅":
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("🤖 AI 채팅")
     st.write("GPT-OSS, Gemma 또는 기타 AI와 자유롭게 대화하세요.")
@@ -592,7 +596,7 @@ with tab3:
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-with tab4:
+elif selected_function == "💬 대화 기록":
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("💬 AI 대화 기록")
     
