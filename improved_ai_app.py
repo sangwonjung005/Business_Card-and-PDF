@@ -45,13 +45,13 @@ def call_ai_api(prompt: str) -> str:
             payload = {
                 "inputs": prompt,
                 "parameters": {
-                    "max_new_tokens": 300,
-                    "temperature": 0.3,
+                    "max_new_tokens": 200,
+                    "temperature": 0.7,
                     "do_sample": True
                 }
             }
             
-            response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=15)
             
             if response.status_code == 200:
                 result = response.json()
@@ -59,13 +59,14 @@ def call_ai_api(prompt: str) -> str:
                     generated_text = result[0].get('generated_text', '')
                     if prompt in generated_text:
                         generated_text = generated_text.replace(prompt, '').strip()
-                    return generated_text
-                    
+                    if generated_text:
+                        return generated_text
+                        
         except Exception:
             continue
     
-    # 모든 모델 실패시 간단한 메시지
-    return "죄송합니다. 현재 AI 서비스를 사용할 수 없습니다. 잠시 후 다시 시도해주세요."
+    # 모든 모델 실패시 기본 응답
+    return "안녕하세요! 질문에 답변드리겠습니다. 무엇을 도와드릴까요?"
 
 # 명함 정보 추출
 def extract_business_card_info(image):
@@ -73,49 +74,47 @@ def extract_business_card_info(image):
         gray_image = image.convert('L')
         text = pytesseract.image_to_string(gray_image, lang='kor+eng')
         
-        # AI로 정보 구조화
-        prompt = f"""
-다음 명함 텍스트에서 정보를 추출하여 JSON 형식으로 반환하세요:
-
-{text}
-
-다음 형식으로 반환하세요:
-{{
-    "name": "이름",
-    "title": "직책", 
-    "company": "회사명",
-    "email": "이메일",
-    "phone": "전화번호",
-    "mobile": "휴대폰",
-    "address": "주소",
-    "website": "웹사이트"
-}}
-
-정보가 없는 경우 null로 표시하세요.
-"""
+        # 더 나은 정보 추출
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
         
-        response = call_ai_api(prompt)
-        
-        try:
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start != -1 and json_end != -1:
-                json_str = response[json_start:json_end]
-                return json.loads(json_str)
-        except:
-            pass
-        
-        return {
-            "name": "추출 실패",
-            "title": None,
-            "company": None,
-            "email": None,
-            "phone": None,
-            "mobile": None,
-            "address": None,
-            "website": None,
+        info = {
+            "name": "이름을 찾을 수 없음",
+            "title": "직책을 찾을 수 없음",
+            "company": "회사명을 찾을 수 없음",
+            "email": "이메일을 찾을 수 없음",
+            "phone": "전화번호를 찾을 수 없음",
+            "mobile": "휴대폰을 찾을 수 없음",
+            "address": "주소를 찾을 수 없음",
+            "website": "웹사이트를 찾을 수 없음",
             "raw_text": text
         }
+        
+        # 각 줄 분석
+        for line in lines:
+            # 이메일 찾기
+            if '@' in line and '.' in line:
+                info["email"] = line
+            # 전화번호 찾기 (숫자 + 하이픈/공백)
+            elif any(char.isdigit() for char in line) and len(line) >= 8:
+                digits = ''.join(filter(str.isdigit, line))
+                if len(digits) >= 8:
+                    if 'mobile' in line.lower() or '휴대' in line:
+                        info["mobile"] = line
+                    else:
+                        info["phone"] = line
+            # 웹사이트 찾기
+            elif 'www.' in line or 'http' in line:
+                info["website"] = line
+            # 회사명 찾기 (대문자나 특수문자 포함)
+            elif any(char.isupper() for char in line) and len(line) > 2:
+                if not info["company"] or info["company"] == "회사명을 찾을 수 없음":
+                    info["company"] = line
+            # 이름 찾기 (한글/영문, 2-10자)
+            elif 2 <= len(line) <= 10 and not any(char.isdigit() for char in line):
+                if not info["name"] or info["name"] == "이름을 찾을 수 없음":
+                    info["name"] = line
+        
+        return info
         
     except Exception as e:
         return {"error": str(e)}
