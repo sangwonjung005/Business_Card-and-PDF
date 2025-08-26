@@ -457,6 +457,70 @@ if selected_function == "📇 명함 OCR":
                 else:
                     st.error("AI 명함 정보 추출에 실패했습니다.")
     
+    # 명함에 대한 질문 기능
+    if st.session_state.business_cards:
+        st.subheader("💬 명함에 대해 AI에게 질문하기")
+        st.write("추출된 명함 정보에 대해 질문하세요.")
+        
+        # 명함 선택
+        selected_card_index = st.selectbox(
+            "질문할 명함을 선택하세요:",
+            range(len(st.session_state.business_cards)),
+            format_func=lambda x: f"{st.session_state.business_cards[x].get('name', 'Unknown')} - {st.session_state.business_cards[x].get('company', 'Unknown')}"
+        )
+        
+        if selected_card_index is not None:
+            selected_card = st.session_state.business_cards[selected_card_index]
+            
+            # 선택된 명함 정보 표시
+            with st.expander("선택된 명함 정보"):
+                st.json(selected_card)
+            
+            # 질문 입력
+            card_question = st.text_input(
+                "명함에 대해 질문하세요:",
+                placeholder="예: 이 사람의 연락처는? 회사 주소는? 직책은?",
+                key="card_question"
+            )
+            
+            if st.button("🤖 AI 답변 생성", type="primary", key="card_question_button") and card_question:
+                with st.spinner("AI가 명함 정보를 바탕으로 답변을 생성하고 있습니다..."):
+                    # 명함 정보를 컨텍스트로 사용
+                    card_context = f"""
+명함 정보:
+이름: {selected_card.get('name', 'N/A')}
+직책: {selected_card.get('title', 'N/A')}
+회사: {selected_card.get('company', 'N/A')}
+이메일: {selected_card.get('email', 'N/A')}
+전화: {selected_card.get('phone', 'N/A')}
+휴대폰: {selected_card.get('mobile', 'N/A')}
+주소: {selected_card.get('address', 'N/A')}
+웹사이트: {selected_card.get('website', 'N/A')}
+부서: {selected_card.get('department', 'N/A')}
+"""
+                    
+                    # AI 답변 생성
+                    card_answer = generate_answer(card_question, card_context)
+                    
+                    # 대화 기록에 저장
+                    conversation_entry = {
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "question": card_question,
+                        "answer": card_answer,
+                        "context": f"명함 정보: {selected_card.get('name', 'Unknown')}",
+                        "type": "business_card_qa"
+                    }
+                    st.session_state.conversation_history.append(conversation_entry)
+                    
+                    # 파일에 영구 저장
+                    save_data_to_file(st.session_state.conversation_history, CONVERSATION_FILE)
+                    
+                    # 답변 표시
+                    st.markdown('<div class="business-card">', unsafe_allow_html=True)
+                    st.subheader("🤖 AI 답변")
+                    st.write(card_answer)
+                    st.markdown('</div>', unsafe_allow_html=True)
+    
     # 저장된 명함 목록
     if st.session_state.business_cards:
         st.subheader("📚 저장된 명함 목록")
@@ -606,6 +670,9 @@ elif selected_function == "💬 대화 기록":
             if entry.get('type') == 'chat':
                 icon = "💬"
                 title = f"채팅 {len(st.session_state.conversation_history) - i}"
+            elif entry.get('type') == 'business_card_qa':
+                icon = "📇"
+                title = f"명함 질문 {len(st.session_state.conversation_history) - i}"
             else:
                 icon = "📄"
                 title = f"PDF 대화 {len(st.session_state.conversation_history) - i}"
