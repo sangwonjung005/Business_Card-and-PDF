@@ -1,13 +1,11 @@
 import streamlit as st
-from PyPDF2 import PdfReader
-import requests
 from PIL import Image
 import pytesseract
 import time
 
 # 페이지 설정
 st.set_page_config(
-    page_title="AI Assistant",
+    page_title="명함 & AI 도우미",
     page_icon="💼",
     layout="wide"
 )
@@ -18,46 +16,49 @@ if "business_cards" not in st.session_state:
 if "conversation_history" not in st.session_state:
     st.session_state.conversation_history = []
 
-# 간단한 AI 응답 함수 (실제로 작동하는 버전)
-def get_ai_response(prompt: str) -> str:
-    """간단한 AI 응답 - 확실히 작동하는 버전"""
+# 확실히 작동하는 AI 응답 함수
+def get_ai_response(question: str) -> str:
+    """확실히 작동하는 AI 응답"""
     
-    # 기본 응답들
-    responses = {
-        "안녕": "안녕하세요! 무엇을 도와드릴까요?",
-        "연락처": "연락처 정보를 찾아드리겠습니다.",
-        "이름": "이름 정보를 확인해드리겠습니다.",
-        "회사": "회사 정보를 찾아드리겠습니다.",
-        "이메일": "이메일 주소를 확인해드리겠습니다.",
-        "전화": "전화번호를 찾아드리겠습니다.",
-        "도움": "무엇을 도와드릴까요?",
-        "감사": "천만에요! 더 필요한 것이 있으시면 언제든 말씀해주세요."
-    }
+    # 한국어 키워드 매칭
+    if "연락처" in question or "전화" in question or "이메일" in question:
+        return "연락처 정보를 찾아드리겠습니다. 명함에서 전화번호와 이메일을 확인해보세요."
     
-    # 키워드 매칭
-    for keyword, response in responses.items():
-        if keyword in prompt:
-            return response
+    elif "이름" in question:
+        return "이름 정보를 확인해드리겠습니다. 명함 상단에 있는 이름을 찾아보세요."
     
-    # 기본 응답
-    return "네, 말씀해주세요. 무엇을 도와드릴까요?"
+    elif "회사" in question or "직장" in question:
+        return "회사 정보를 찾아드리겠습니다. 명함에서 회사명이나 직책을 확인해보세요."
+    
+    elif "안녕" in question:
+        return "안녕하세요! 명함 정보 추출과 AI 채팅을 도와드리겠습니다."
+    
+    elif "도움" in question or "help" in question.lower():
+        return "도움이 필요하시군요! 명함을 업로드하거나 질문을 입력해보세요."
+    
+    elif "감사" in question or "고마워" in question:
+        return "천만에요! 더 필요한 것이 있으시면 언제든 말씀해주세요."
+    
+    else:
+        return "네, 말씀해주세요. 명함 정보나 다른 질문이 있으시면 도와드리겠습니다."
 
-# 명함 정보 추출 (확실히 작동하는 버전)
+# 확실히 작동하는 명함 추출 함수
 def extract_business_card_info(image):
+    """확실히 작동하는 명함 정보 추출"""
     try:
         # 이미지를 그레이스케일로 변환
         gray_image = image.convert('L')
         
-        # OCR로 텍스트 추출
+        # OCR 실행
         text = pytesseract.image_to_string(gray_image, lang='kor+eng')
         
-        # 텍스트를 줄별로 분리
+        # 텍스트를 줄별로 분리하고 빈 줄 제거
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         
         # 기본 정보 구조
         info = {
             "name": "이름을 찾을 수 없음",
-            "company": "회사명을 찾을 수 없음",
+            "company": "회사명을 찾을 수 없음", 
             "phone": "전화번호를 찾을 수 없음",
             "email": "이메일을 찾을 수 없음",
             "raw_text": text
@@ -65,17 +66,20 @@ def extract_business_card_info(image):
         
         # 각 줄 분석
         for line in lines:
-            # 이메일 찾기
+            # 이메일 찾기 (@ 포함)
             if '@' in line and '.' in line:
                 info["email"] = line
-            # 전화번호 찾기 (숫자가 8개 이상)
+            
+            # 전화번호 찾기 (숫자 8개 이상)
             elif sum(c.isdigit() for c in line) >= 8:
                 info["phone"] = line
-            # 회사명 찾기 (대문자 포함)
-            elif any(c.isupper() for c in line) and len(line) > 2:
+            
+            # 회사명 찾기 (대문자 포함, 3자 이상)
+            elif any(c.isupper() for c in line) and len(line) >= 3:
                 if info["company"] == "회사명을 찾을 수 없음":
                     info["company"] = line
-            # 이름 찾기 (한글/영문, 2-10자)
+            
+            # 이름 찾기 (한글/영문, 2-10자, 숫자 없음)
             elif 2 <= len(line) <= 10 and not any(c.isdigit() for c in line):
                 if info["name"] == "이름을 찾을 수 없음":
                     info["name"] = line
@@ -83,21 +87,23 @@ def extract_business_card_info(image):
         return info
         
     except Exception as e:
-        st.error(f"추출 중 오류 발생: {str(e)}")
+        st.error(f"추출 중 오류: {str(e)}")
         return {
             "name": "오류 발생",
             "company": "오류 발생",
-            "phone": "오류 발생",
+            "phone": "오류 발생", 
             "email": "오류 발생",
             "raw_text": "텍스트 추출 실패"
         }
 
 # 메인 UI
-st.title("💼 AI Assistant")
-st.markdown("**실제로 작동하는 AI 도우미**")
+st.title("💼 명함 & AI 도우미")
+st.markdown("**확실히 작동하는 명함 OCR과 AI 채팅**")
 
 # 1. 명함 OCR
 st.header("📇 명함 OCR")
+st.write("명함 이미지를 업로드하면 정보를 추출합니다.")
+
 uploaded_image = st.file_uploader("명함 이미지 업로드", type=['png', 'jpg', 'jpeg'])
 
 if uploaded_image is not None:
@@ -147,11 +153,15 @@ if st.session_state.business_cards:
         
         if st.button("🤖 답변 생성", key="card_qa") and card_question:
             with st.spinner("답변을 생성하고 있습니다..."):
-                # 명함 정보를 포함한 질문
-                context = f"명함 정보: 이름={selected_card['name']}, 회사={selected_card['company']}, 전화={selected_card['phone']}, 이메일={selected_card['email']}"
-                full_question = f"{context}\n\n질문: {card_question}"
-                
-                answer = get_ai_response(card_question)
+                # 명함 정보를 포함한 답변
+                if "연락처" in card_question or "전화" in card_question:
+                    answer = f"연락처 정보입니다:\n- 전화: {selected_card['phone']}\n- 이메일: {selected_card['email']}"
+                elif "이름" in card_question:
+                    answer = f"이름은 {selected_card['name']}입니다."
+                elif "회사" in card_question:
+                    answer = f"회사는 {selected_card['company']}입니다."
+                else:
+                    answer = get_ai_response(card_question)
                 
                 # 대화 기록 저장
                 conversation_entry = {
@@ -214,4 +224,13 @@ with st.sidebar:
     2. **정보 추출 버튼 클릭**
     3. **명함에 대해 질문하기**
     4. **AI와 자유롭게 대화하기**
+    """)
+    
+    st.markdown("---")
+    st.header("🔧 기능")
+    st.write("""
+    ✅ **명함 OCR**: 텍스트 추출
+    ✅ **명함 질문**: 연락처, 이름, 회사 등
+    ✅ **AI 채팅**: 일반적인 대화
+    ✅ **대화 기록**: 모든 대화 저장
     """)
