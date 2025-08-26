@@ -79,22 +79,29 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def call_gpt_oss_api(prompt: str) -> str:
-    """GPT-OSS API 호출 - 여러 모델 시도"""
+    """GPT-OSS API 호출 - 여러 모델 시도 (Gemma 포함)"""
     
-    # 다양한 GPT-OSS 모델들
-    gpt_oss_models = [
+    # 다양한 모델들 (GPT-OSS + Gemma)
+    models = [
+        # GPT-OSS 모델들
         "openai/gpt-oss-20b",
         "openai/gpt-oss-120b",
+        # Gemma 모델들
+        "google/gemma-3-270m",
+        "google/gemma-2b",
+        "google/gemma-7b",
+        # 기타 대안 모델들
         "microsoft/DialoGPT-medium",
         "gpt2",
         "EleutherAI/gpt-neo-125M",
         "microsoft/DialoGPT-small"
     ]
     
-    for model in gpt_oss_models:
+    for model in models:
         try:
             st.write(f"🔄 Trying {model}...")
             
+            # Hugging Face API 시도
             API_URL = f"https://api-inference.huggingface.co/models/{model}"
             headers = {"Content-Type": "application/json"}
             
@@ -106,6 +113,17 @@ def call_gpt_oss_api(prompt: str) -> str:
                         "max_new_tokens": 500,
                         "temperature": 0.3,
                         "do_sample": True
+                    }
+                }
+            elif "gemma" in model:
+                # Gemma 모델용 프롬프트 형식
+                payload = {
+                    "inputs": f"<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n",
+                    "parameters": {
+                        "max_new_tokens": 500,
+                        "temperature": 0.3,
+                        "do_sample": True,
+                        "top_p": 0.9
                     }
                 }
             else:
@@ -127,6 +145,13 @@ def call_gpt_oss_api(prompt: str) -> str:
                     # 프롬프트 제거
                     if prompt in generated_text:
                         generated_text = generated_text.replace(prompt, '').strip()
+                    # Gemma 특별 처리
+                    if "gemma" in model:
+                        # Gemma 응답에서 모델 부분만 추출
+                        if "<start_of_turn>model\n" in generated_text:
+                            generated_text = generated_text.split("<start_of_turn>model\n")[-1]
+                        if "<end_of_turn>" in generated_text:
+                            generated_text = generated_text.split("<end_of_turn>")[0]
                     st.success(f"✅ {model} 성공!")
                     return generated_text
                 else:
@@ -138,9 +163,48 @@ def call_gpt_oss_api(prompt: str) -> str:
             st.warning(f"⚠️ {model}: {str(e)}")
             continue
     
+    # Hugging Face 실패시 Ollama 시도
+    st.info("🔄 Hugging Face 실패. Ollama Gemma 시도...")
+    
+    ollama_models = ["gemma3:270m", "gemma2:2b", "gemma2:7b"]
+    
+    for ollama_model in ollama_models:
+        try:
+            st.write(f"🔄 Trying Ollama {ollama_model}...")
+            
+            # Ollama API 호출
+            ollama_url = "http://localhost:11434/api/generate"
+            ollama_payload = {
+                "model": ollama_model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "num_predict": 500
+                }
+            }
+            
+            response = requests.post(ollama_url, json=ollama_payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                generated_text = result.get('response', '')
+                if generated_text:
+                    st.success(f"✅ Ollama {ollama_model} 성공!")
+                    return generated_text
+                else:
+                    st.warning(f"⚠️ Ollama {ollama_model}: 빈 응답")
+            else:
+                st.warning(f"⚠️ Ollama {ollama_model}: HTTP {response.status_code}")
+                
+        except Exception as e:
+            st.warning(f"⚠️ Ollama {ollama_model}: {str(e)}")
+            continue
+    
     # 모든 모델 실패시 기본 응답
-    st.error("❌ 모든 GPT-OSS 모델 실패.")
-    return "죄송합니다. 현재 GPT-OSS 모델들을 사용할 수 없습니다."
+    st.error("❌ 모든 모델 실패.")
+    return "죄송합니다. 현재 GPT-OSS와 Gemma 모델들을 사용할 수 없습니다."
 
 def extract_business_card_info(image):
     """명함 이미지에서 정보 추출"""
@@ -283,16 +347,16 @@ def generate_answer(question: str, context: str) -> str:
         return f"답변 생성 중 오류: {str(e)}"
 
 # 메인 UI
-st.title("💼 GPT-OSS Only Business Card OCR & PDF Assistant")
-st.markdown("**GPT-OSS 전용** - 명함 OCR과 PDF 질의응답 시스템")
+st.title("💼 GPT-OSS & Gemma Business Card OCR & PDF Assistant")
+st.markdown("**GPT-OSS + Gemma** - 명함 OCR과 PDF 질의응답 시스템")
 
 # 탭 생성
 tab1, tab2, tab3 = st.tabs(["📇 명함 OCR", "📄 PDF RAG", "💬 대화 기록"])
 
 with tab1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.header("📇 명함 OCR (GPT-OSS Only)")
-    st.write("명함 이미지를 업로드하면 GPT-OSS가 정보를 추출합니다.")
+    st.header("📇 명함 OCR (GPT-OSS & Gemma)")
+    st.write("명함 이미지를 업로드하면 GPT-OSS 또는 Gemma가 정보를 추출합니다.")
     
     uploaded_image = st.file_uploader(
         "명함 이미지 업로드",
@@ -304,8 +368,8 @@ with tab1:
         image = Image.open(uploaded_image)
         st.image(image, caption="업로드된 명함", use_column_width=True)
         
-        if st.button("🔍 GPT-OSS로 명함 정보 추출", type="primary"):
-            with st.spinner("GPT-OSS가 명함 정보를 추출하고 있습니다..."):
+        if st.button("🔍 AI로 명함 정보 추출", type="primary"):
+            with st.spinner("AI가 명함 정보를 추출하고 있습니다..."):
                 card_info = extract_business_card_info(image)
                 
                 if card_info and "error" not in card_info:
@@ -315,7 +379,7 @@ with tab1:
                     
                     # 결과 표시
                     st.markdown('<div class="business-card">', unsafe_allow_html=True)
-                    st.subheader("📋 GPT-OSS 추출 결과")
+                    st.subheader("📋 AI 추출 결과")
                     
                     col1, col2 = st.columns(2)
                     
@@ -344,9 +408,9 @@ with tab1:
                     
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    st.success("✅ GPT-OSS가 명함 정보를 성공적으로 추출했습니다!")
+                    st.success("✅ AI가 명함 정보를 성공적으로 추출했습니다!")
                 else:
-                    st.error("GPT-OSS 명함 정보 추출에 실패했습니다.")
+                    st.error("AI 명함 정보 추출에 실패했습니다.")
     
     # 저장된 명함 목록
     if st.session_state.business_cards:
@@ -358,8 +422,8 @@ with tab1:
 
 with tab2:
     st.markdown('<div class="pdf-section">', unsafe_allow_html=True)
-    st.header("📄 PDF RAG (GPT-OSS Only)")
-    st.write("PDF를 업로드하고 질문하면 GPT-OSS가 답변합니다.")
+    st.header("📄 PDF RAG (GPT-OSS & Gemma)")
+    st.write("PDF를 업로드하고 질문하면 GPT-OSS 또는 Gemma가 답변합니다.")
     
     uploaded_pdf = st.file_uploader(
         "PDF 파일 업로드",
@@ -381,15 +445,15 @@ with tab2:
     
     # 질문 입력
     if st.session_state.pdf_docs:
-        st.subheader("💬 PDF에 대해 GPT-OSS에게 질문하기")
+        st.subheader("💬 PDF에 대해 AI에게 질문하기")
         
         question = st.text_input(
             "질문을 입력하세요:",
             placeholder="PDF 내용에 대해 질문하세요..."
         )
         
-        if st.button("🤖 GPT-OSS 답변 생성", type="primary") and question:
-            with st.spinner("GPT-OSS가 답변을 생성하고 있습니다..."):
+        if st.button("🤖 AI 답변 생성", type="primary") and question:
+            with st.spinner("AI가 답변을 생성하고 있습니다..."):
                 # 컨텍스트 생성
                 context = get_context(question, st.session_state.pdf_docs)
                 
@@ -407,7 +471,7 @@ with tab2:
                 
                 # 답변 표시
                 st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader("🤖 GPT-OSS 답변")
+                st.subheader("🤖 AI 답변")
                 st.write(answer)
                 
                 if context:
@@ -421,20 +485,20 @@ with tab2:
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.header("💬 GPT-OSS 대화 기록")
+    st.header("💬 AI 대화 기록")
     
     if st.session_state.conversation_history:
         for i, entry in enumerate(reversed(st.session_state.conversation_history)):
             with st.expander(f"대화 {len(st.session_state.conversation_history) - i}: {entry['question'][:50]}..."):
                 st.write(f"**질문:** {entry['question']}")
-                st.write(f"**GPT-OSS 답변:** {entry['answer']}")
+                st.write(f"**AI 답변:** {entry['answer']}")
                 st.write(f"**시간:** {entry['timestamp']}")
                 
                 if entry.get('context'):
                     with st.expander("컨텍스트"):
                         st.text(entry['context'])
     else:
-        st.info("아직 GPT-OSS 대화 기록이 없습니다.")
+        st.info("아직 AI 대화 기록이 없습니다.")
     
     # 대화 기록 초기화
     if st.button("🗑️ 대화 기록 초기화"):
@@ -444,7 +508,7 @@ with tab3:
 
 # 사이드바 통계
 with st.sidebar:
-    st.header("📊 GPT-OSS 통계")
+    st.header("📊 AI 통계")
     
     # 명함 통계
     st.subheader("📇 명함")
@@ -459,25 +523,25 @@ with st.sidebar:
     
     # 대화 통계
     st.subheader("💬 대화")
-    st.metric("GPT-OSS 대화 수", len(st.session_state.conversation_history))
+    st.metric("AI 대화 수", len(st.session_state.conversation_history))
     
     st.markdown("---")
     
     # 기능 설명
-    st.header("🔧 GPT-OSS 기능")
+    st.header("🔧 AI 기능")
     st.write("""
     **📇 명함 OCR:**
     - 명함 이미지 업로드
-    - GPT-OSS 정보 추출
+    - GPT-OSS/Gemma 정보 추출
     - 구조화된 데이터 저장
     
     **📄 PDF RAG:**
     - PDF 문서 업로드
     - 텍스트 청킹
-    - GPT-OSS 기반 질의응답
+    - GPT-OSS/Gemma 기반 질의응답
     
     **💬 대화 기록:**
-    - GPT-OSS 질문-답변 히스토리
+    - AI 질문-답변 히스토리
     - 컨텍스트 추적
     - 메모리 관리
     """)
