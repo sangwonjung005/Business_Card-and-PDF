@@ -6,7 +6,6 @@ import numpy as np
 import time
 import re
 import requests
-import cv2
 from PIL import Image
 import pytesseract
 import json
@@ -102,20 +101,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def extract_business_card_info(image):
-    """명함 이미지에서 정보 추출"""
+    """명함 이미지에서 정보 추출 (OpenCV 없이)"""
     try:
-        # 이미지를 OpenCV 형식으로 변환
-        if isinstance(image, Image.Image):
-            image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        else:
-            image_cv = image
+        # 이미지 전처리 (PIL 사용)
+        # 그레이스케일 변환
+        gray_image = image.convert('L')
         
-        # 이미지 전처리
-        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        # 이미지 크기 조정 (OCR 성능 향상)
+        width, height = gray_image.size
+        if width > 1200:
+            ratio = 1200 / width
+            new_width = 1200
+            new_height = int(height * ratio)
+            gray_image = gray_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
         
         # OCR 실행
-        text = pytesseract.image_to_string(thresh, lang='kor+eng')
+        text = pytesseract.image_to_string(gray_image, lang='kor+eng')
         
         # GPT-OSS를 사용하여 정보 구조화
         structured_info = structure_business_card_info(text)
