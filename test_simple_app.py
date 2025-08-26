@@ -5,45 +5,55 @@ import json
 st.title("🧪 Simple Test App")
 st.write("This is a simple test app without OpenCV")
 
-# Simple GPT-OSS test with detailed error handling
-def test_gpt_oss():
-    try:
-        API_URL = "https://api-inference.huggingface.co/models/openai/gpt-oss-20b"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "inputs": "Hello, how are you?",
-            "parameters": {"max_new_tokens": 100, "temperature": 0.7}
-        }
-        
-        st.write("🔄 Calling GPT-OSS API...")
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        
-        st.write(f"📊 Status Code: {response.status_code}")
-        
-        if response.status_code == 200:
-            result = response.json()
-            st.write(f"📄 Response: {result}")
-            return True, "Success"
-        else:
-            st.write(f"❌ Error Response: {response.text}")
-            return False, f"HTTP {response.status_code}"
+# Test different GPT-OSS models
+def test_gpt_oss_models():
+    models = [
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b", 
+        "microsoft/DialoGPT-medium",
+        "gpt2"
+    ]
+    
+    results = {}
+    
+    for model in models:
+        try:
+            API_URL = f"https://api-inference.huggingface.co/models/{model}"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "inputs": "Hello, how are you?",
+                "parameters": {"max_new_tokens": 50, "temperature": 0.7}
+            }
             
-    except Exception as e:
-        st.write(f"💥 Exception: {str(e)}")
-        return False, str(e)
+            st.write(f"🔄 Testing {model}...")
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                results[model] = {"status": "Success", "response": result}
+                st.success(f"✅ {model} working!")
+            else:
+                results[model] = {"status": f"HTTP {response.status_code}", "error": response.text}
+                st.error(f"❌ {model} failed: HTTP {response.status_code}")
+                
+        except Exception as e:
+            results[model] = {"status": "Exception", "error": str(e)}
+            st.error(f"💥 {model} exception: {str(e)}")
+    
+    return results
 
-if st.button("Test GPT-OSS"):
-    success, message = test_gpt_oss()
-    if success:
-        st.success("✅ GPT-OSS API working!")
-    else:
-        st.error(f"❌ GPT-OSS API failed: {message}")
+if st.button("Test All GPT-OSS Models"):
+    results = test_gpt_oss_models()
+    
+    st.markdown("---")
+    st.subheader("📊 Test Results")
+    for model, result in results.items():
+        with st.expander(f"{model} - {result['status']}"):
+            st.json(result)
 
-st.write("If you see this, the app is working without OpenCV!")
-
-# Fallback test with OpenAI
+# Simple OpenAI test
 st.markdown("---")
-st.subheader("🔄 OpenAI Fallback Test")
+st.subheader("🔄 OpenAI Test")
 
 def test_openai():
     try:
@@ -71,3 +81,23 @@ if st.button("Test OpenAI"):
         st.success(f"✅ OpenAI working: {message}")
     else:
         st.error(f"❌ OpenAI failed: {message}")
+
+# Manual API key test
+st.markdown("---")
+st.subheader("🔑 Manual API Key Test")
+
+manual_key = st.text_input("Enter OpenAI API Key (for testing):", type="password")
+if manual_key and st.button("Test Manual Key"):
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=manual_key)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Hello, how are you?"}],
+            max_tokens=50
+        )
+        st.success(f"✅ Manual key working: {response.choices[0].message.content}")
+    except Exception as e:
+        st.error(f"❌ Manual key failed: {str(e)}")
+
+st.write("If you see this, the app is working without OpenCV!") 
