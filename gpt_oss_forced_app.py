@@ -389,7 +389,7 @@ st.title("💼 AI Business Card OCR & PDF Assistant")
 st.markdown("**GPT-OSS + Gemma + 오픈소스 AI** - 명함 OCR과 PDF 질의응답 시스템")
 
 # 탭 생성
-tab1, tab2, tab3 = st.tabs(["📇 명함 OCR", "📄 PDF RAG", "💬 대화 기록"])
+tab1, tab2, tab3, tab4 = st.tabs(["📇 명함 OCR", "📄 PDF RAG", "🤖 AI 채팅", "💬 대화 기록"])
 
 with tab1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -506,7 +506,8 @@ with tab2:
                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "question": question,
                     "answer": answer,
-                    "context": context[:200] + "..." if len(context) > 200 else context
+                    "context": context[:200] + "..." if len(context) > 200 else context,
+                    "type": "pdf_rag"
                 }
                 st.session_state.conversation_history.append(conversation_entry)
                 
@@ -529,16 +530,89 @@ with tab2:
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.header("🤖 AI 채팅")
+    st.write("GPT-OSS, Gemma 또는 기타 AI와 자유롭게 대화하세요.")
+    
+    # 채팅 입력
+    chat_question = st.text_input(
+        "질문을 입력하세요:",
+        placeholder="무엇이든 물어보세요...",
+        key="chat_input"
+    )
+    
+    if st.button("🤖 AI 답변 생성", type="primary", key="chat_button") and chat_question:
+        with st.spinner("AI가 답변을 생성하고 있습니다..."):
+            # AI 답변 생성
+            chat_answer = call_gpt_oss_api(chat_question)
+            
+            # 대화 기록에 저장
+            conversation_entry = {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "question": chat_question,
+                "answer": chat_answer,
+                "context": "일반 채팅",
+                "type": "chat"
+            }
+            st.session_state.conversation_history.append(conversation_entry)
+            
+            # 파일에 영구 저장
+            save_data_to_file(st.session_state.conversation_history, CONVERSATION_FILE)
+            
+            # 답변 표시
+            st.markdown('<div class="business-card">', unsafe_allow_html=True)
+            st.subheader("🤖 AI 답변")
+            st.write(chat_answer)
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 채팅 예시
+    st.subheader("💡 질문 예시")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("안녕하세요!", key="example1"):
+            st.session_state.chat_input = "안녕하세요!"
+            st.rerun()
+        if st.button("오늘 날씨는?", key="example2"):
+            st.session_state.chat_input = "오늘 날씨는 어떤가요?"
+            st.rerun()
+        if st.button("재미있는 이야기 해줘", key="example3"):
+            st.session_state.chat_input = "재미있는 이야기나 농담을 해줘"
+            st.rerun()
+    
+    with col2:
+        if st.button("코딩 도움", key="example4"):
+            st.session_state.chat_input = "Python으로 간단한 계산기 만드는 방법을 알려줘"
+            st.rerun()
+        if st.button("요리 레시피", key="example5"):
+            st.session_state.chat_input = "김치찌개 만드는 방법을 알려줘"
+            st.rerun()
+        if st.button("여행 추천", key="example6"):
+            st.session_state.chat_input = "한국에서 가볼 만한 여행지 추천해줘"
+            st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tab4:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("💬 AI 대화 기록")
     
     if st.session_state.conversation_history:
         for i, entry in enumerate(reversed(st.session_state.conversation_history)):
-            with st.expander(f"대화 {len(st.session_state.conversation_history) - i}: {entry['question'][:50]}..."):
+            # 대화 타입에 따른 아이콘
+            if entry.get('type') == 'chat':
+                icon = "💬"
+                title = f"채팅 {len(st.session_state.conversation_history) - i}"
+            else:
+                icon = "📄"
+                title = f"PDF 대화 {len(st.session_state.conversation_history) - i}"
+            
+            with st.expander(f"{icon} {title}: {entry['question'][:50]}..."):
                 st.write(f"**질문:** {entry['question']}")
                 st.write(f"**AI 답변:** {entry['answer']}")
                 st.write(f"**시간:** {entry['timestamp']}")
+                st.write(f"**타입:** {entry.get('type', 'PDF RAG')}")
                 
-                if entry.get('context'):
+                if entry.get('context') and entry.get('context') != "일반 채팅":
                     with st.expander("컨텍스트"):
                         st.text(entry['context'])
     else:
@@ -619,8 +693,13 @@ with st.sidebar:
     - 텍스트 청킹
     - AI 기반 질의응답
     
+    **🤖 AI 채팅:**
+    - 자유로운 AI 대화
+    - 질문 예시 제공
+    - 다양한 주제 대화
+    
     **💬 대화 기록:**
     - AI 질문-답변 히스토리
-    - 컨텍스트 추적
+    - 채팅/PDF 대화 구분
     - 메모리 관리
     """)
