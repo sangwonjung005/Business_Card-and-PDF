@@ -22,48 +22,76 @@ if "conversation_history" not in st.session_state:
 if "pdf_content" not in st.session_state:
     st.session_state.pdf_content = ""
 
-# AI API 호출 함수
+# AI API 호출 함수 (GPT-OSS, Gemma 포함)
 def call_ai_api(question: str) -> str:
-    """AI API 호출"""
-    try:
-        # Hugging Face Inference API 사용
-        API_URL = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
-        
-        headers = {
-            "Authorization": f"Bearer {st.secrets.get('HUGGINGFACE_API_KEY', '')}",
-            "Content-Type": "application/json"
+    """AI API 호출 - GPT-OSS, Gemma, DialoGPT 순서로 시도"""
+    
+    models = [
+        {
+            "name": "GPT-OSS-20B",
+            "url": "https://api-inference.huggingface.co/models/openai/gpt-oss-20b",
+            "description": "GPT-OSS 20B 모델"
+        },
+        {
+            "name": "Gemma-3-270m",
+            "url": "https://api-inference.huggingface.co/models/google/gemma-3-270m",
+            "description": "Gemma 3 270M 모델"
+        },
+        {
+            "name": "DialoGPT-medium",
+            "url": "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
+            "description": "DialoGPT Medium 모델"
         }
-        
-        payload = {
-            "inputs": question,
-            "parameters": {
-                "max_length": 100,
-                "temperature": 0.7
-            }
-        }
-        
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=10)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if isinstance(result, list) and len(result) > 0:
-                return result[0].get('generated_text', '답변을 생성할 수 없습니다.')
-            else:
-                return str(result)
-        else:
-            return f"API 오류: {response.status_code}"
+    ]
+    
+    headers = {
+        "Authorization": f"Bearer {st.secrets.get('HUGGINGFACE_API_KEY', '')}",
+        "Content-Type": "application/json"
+    }
+    
+    for model in models:
+        try:
+            st.write(f"🔄 {model['name']} 시도 중...")
             
-    except Exception as e:
-        return f"오류 발생: {str(e)}"
+            payload = {
+                "inputs": question,
+                "parameters": {
+                    "max_length": 200,
+                    "temperature": 0.7,
+                    "do_sample": True
+                }
+            }
+            
+            response = requests.post(model["url"], headers=headers, json=payload, timeout=15)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and len(result) > 0:
+                    answer = result[0].get('generated_text', '')
+                    # 프롬프트 제거
+                    if question in answer:
+                        answer = answer.replace(question, '').strip()
+                    return f"**{model['name']} 답변:** {answer}"
+                else:
+                    return f"**{model['name']} 답변:** {str(result)}"
+            else:
+                st.write(f"❌ {model['name']} 실패: {response.status_code}")
+                continue
+                
+        except Exception as e:
+            st.write(f"❌ {model['name']} 오류: {str(e)}")
+            continue
+    
+    return "모든 AI 모델 호출에 실패했습니다."
 
-# 명함 정보 추출 함수
+# 개선된 명함 정보 추출 함수
 def extract_business_card_info(image):
-    """명함에서 정보 추출"""
+    """명함에서 정보 추출 - 개선된 버전"""
     try:
         # 이미지를 그레이스케일로 변환
         gray_image = image.convert('L')
         
-        # OCR 실행
+        # OCR 실행 (한국어 + 영어)
         text = pytesseract.image_to_string(gray_image, lang='kor+eng')
         
         # 텍스트를 줄별로 분리하고 빈 줄 제거
@@ -78,25 +106,38 @@ def extract_business_card_info(image):
             "raw_text": text
         }
         
-        # 각 줄 분석
+        # 개선된 추출 로직
         for line in lines:
-            # 이메일 찾기 (@ 포함)
-            if '@' in line and '.' in line:
-                info["email"] = line
-                
-            # 전화번호 찾기 (숫자 8개 이상)
-            elif sum(c.isdigit() for c in line) >= 8:
-                info["phone"] = line
-                
-            # 회사명 찾기 (대문자 포함, 3자 이상)
+            line = line.strip()
+            
+            # 이메일 찾기 (정확한 패턴)
+            if '@' in line and '.' in line and 'gmail.com' in line.lower():
+                # 이메일만 추출
+                email_parts = line.split()
+                for part in email_parts:
+                    if '@' in part and '.' in part:
+                        info["email"] = part
+                        break
+            
+            # 전화번호 찾기 (숫자 10-11자리)
+            elif any(c.isdigit() for c in line):
+                digits = ''.join(filter(str.isdigit, line))
+                if 10 <= len(digits) <= 11 and not any(word in line.lower() for word in ['번길', '동', '층', '센터']):
+                    info["phone"] = line
+            
+            # 회사명 찾기 (대문자 포함, 3자 이상, 특수문자 제외)
             elif any(c.isupper() for c in line) and len(line) >= 3:
-                if info["company"] == "회사명을 찾을 수 없음":
-                    info["company"] = line
-                    
-            # 이름 찾기 (한글/영문, 2-10자, 숫자 없음)
+                # 주소나 다른 정보가 아닌지 확인
+                if not any(word in line for word in ['번길', '동', '층', '센터', 'www', 'http']):
+                    if info["company"] == "회사명을 찾을 수 없음":
+                        info["company"] = line
+            
+            # 이름 찾기 (한글/영문, 2-10자, 숫자 없음, 특수문자 제외)
             elif 2 <= len(line) <= 10 and not any(c.isdigit() for c in line):
-                if info["name"] == "이름을 찾을 수 없음":
-                    info["name"] = line
+                # 특수문자나 주소 정보가 아닌지 확인
+                if not any(word in line for word in ['번길', '동', '층', '센터', 'www', 'http', '/', '^']):
+                    if info["name"] == "이름을 찾을 수 없음":
+                        info["name"] = line
         
         return info
         
@@ -125,7 +166,7 @@ def read_pdf(pdf_file):
 
 # 메인 UI
 st.title("💼 명함 & AI 도우미")
-st.markdown("**명함 OCR, PDF RAG, AI 채팅**")
+st.markdown("**명함 OCR, PDF RAG, AI 채팅 (GPT-OSS, Gemma 지원)**")
 
 # 탭 생성
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📇 명함 OCR", "💬 명함 질문", "📄 PDF RAG", "🤖 AI 채팅", "📊 대화 기록"])
@@ -295,6 +336,14 @@ with st.sidebar:
     st.write(f"저장된 명함: {len(st.session_state.business_cards)}")
     st.write(f"대화 수: {len(st.session_state.conversation_history)}")
     st.write(f"PDF 업로드: {'있음' if st.session_state.pdf_content else '없음'}")
+    
+    st.markdown("---")
+    st.header("🤖 지원 AI 모델")
+    st.write("""
+    ✅ **GPT-OSS-20B**
+    ✅ **Gemma-3-270m**
+    ✅ **DialoGPT-medium**
+    """)
     
     st.markdown("---")
     st.header("💡 사용법")
