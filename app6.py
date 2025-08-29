@@ -293,7 +293,7 @@ with tab2:
                 
                 with col2:
                     if st.button(f"📖 내용 보기", key=f"view_pdf_{i}"):
-                        st.text_area("PDF 내용", pdf_doc['content'][:2000] + "..." if len(pdf_doc['content']) > 2000 else pdf_doc['content'], height=300)
+                        st.text_area("PDF 내용", pdf_doc['content'][:2000] + "..." if len(pdf_doc['content']) > 2000 else pdf_doc['content'], height=300, key=f"pdf_content_{i}")
                 
                 with col3:
                     if st.button(f"💬 질문하기", key=f"ask_pdf_{i}"):
@@ -423,7 +423,7 @@ with tab2:
                     
                     st.success(f"✅ {len(unique_results)}개의 PDF에서 관련 내용을 찾았습니다!")
                     
-                    for result in unique_results:
+                    for i, result in enumerate(unique_results):
                         with st.expander(f"📄 {result['pdf_name']} ({result['match_type']})"):
                             if result['match_type'] == "파일명":
                                 st.write(f"**매칭 유형:** {result['match_type']}")
@@ -431,7 +431,7 @@ with tab2:
                             else:
                                 st.write(f"**매칭 유형:** {result['match_type']}")
                                 st.write(f"**위치:** {result['position']}번째 문자")
-                                st.text_area("검색된 내용", result['context'], height=150)
+                                st.text_area("검색된 내용", result['context'], height=150, key=f"search_result_{i}")
                 else:
                     st.warning(f"'{search_query}'와 관련된 PDF를 찾을 수 없습니다.")
                     st.info("💡 팁: 파일명이나 내용의 일부만 입력해보세요.")
