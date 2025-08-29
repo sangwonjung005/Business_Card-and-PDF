@@ -437,7 +437,7 @@ with tab3:
                 question_patterns = [
                     "중요 부분은?", "무엇인가?", "어떤가?", "뭐야?", "뭔가?",
                     "설명해줘", "알려줘", "보여줘", "찾아줘", "검색해줘",
-                    "포함한", "포함된", "관련된", "관련한"
+                    "포함한", "포함된", "관련된", "관련한", "중요부분은?"
                 ]
                 
                 for pattern in question_patterns:
@@ -446,9 +446,16 @@ with tab3:
                 # 파일명에서 확장자 제거
                 processed_query = processed_query.replace(".pdf", "").replace(".PDF", "")
                 
+                # 디버깅용 로그 (개발 중에만 사용)
+                st.write(f"🔍 처리된 검색어: '{processed_query}'")
+                
                 for pdf_doc in st.session_state.pdf_documents:
+                    # 디버깅용 로그
+                    st.write(f"📄 검색 중: {pdf_doc['name']}")
+                    
                     # 1. 파일명에서 검색
                     if processed_query.lower() in pdf_doc['name'].lower():
+                        st.write(f"✅ 파일명에서 매칭: {pdf_doc['name']}")
                         search_results.append({
                             "pdf_name": pdf_doc['name'],
                             "context": f"파일명에서 '{processed_query}' 발견",
@@ -459,6 +466,7 @@ with tab3:
                     
                     # 2. PDF 내용에서 검색
                     if processed_query.lower() in pdf_doc['content'].lower():
+                        st.write(f"✅ 내용에서 매칭: {pdf_doc['name']}")
                         # 검색된 텍스트 주변 컨텍스트 추출
                         content_lower = pdf_doc['content'].lower()
                         query_pos = content_lower.find(processed_query.lower())
@@ -475,25 +483,39 @@ with tab3:
                                 "match_type": "내용"
                             })
                     
-                    # 3. 부분 매칭 (단어 단위)
+                    # 3. 부분 매칭 (단어 단위) - 더 유연하게
                     words = processed_query.split()
                     for word in words:
-                        if len(word) > 2 and word.lower() in pdf_doc['content'].lower():
-                            content_lower = pdf_doc['content'].lower()
-                            word_pos = content_lower.find(word.lower())
-                            
-                            if word_pos != -1:
-                                start = max(0, word_pos - 100)
-                                end = min(len(pdf_doc['content']), word_pos + len(word) + 100)
-                                context = pdf_doc['content'][start:end]
-                                
+                        if len(word) > 1:  # 2글자 이상으로 변경
+                            # 파일명에서 단어 검색
+                            if word.lower() in pdf_doc['name'].lower():
+                                st.write(f"✅ 파일명 단어 매칭: {pdf_doc['name']} - '{word}'")
                                 search_results.append({
                                     "pdf_name": pdf_doc['name'],
-                                    "context": context,
-                                    "position": word_pos,
-                                    "match_type": f"부분 매칭 ('{word}')"
+                                    "context": f"파일명에서 '{word}' 발견",
+                                    "position": "파일명",
+                                    "match_type": f"파일명 단어 매칭 ('{word}')"
                                 })
                                 break
+                            
+                            # 내용에서 단어 검색
+                            if word.lower() in pdf_doc['content'].lower():
+                                st.write(f"✅ 내용 단어 매칭: {pdf_doc['name']} - '{word}'")
+                                content_lower = pdf_doc['content'].lower()
+                                word_pos = content_lower.find(word.lower())
+                                
+                                if word_pos != -1:
+                                    start = max(0, word_pos - 100)
+                                    end = min(len(pdf_doc['content']), word_pos + len(word) + 100)
+                                    context = pdf_doc['content'][start:end]
+                                    
+                                    search_results.append({
+                                        "pdf_name": pdf_doc['name'],
+                                        "context": context,
+                                        "position": word_pos,
+                                        "match_type": f"내용 단어 매칭 ('{word}')"
+                                    })
+                                    break
                 
                 if search_results:
                     # 중복 제거 (같은 PDF에서 여러 번 찾은 경우)
