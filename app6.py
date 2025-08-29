@@ -284,7 +284,7 @@ with tab2:
             with st.expander(f"📄 {pdf_doc['name']} (업로드: {pdf_doc['upload_time']})"):
                 st.write(f"**크기:** {pdf_doc['size']} 문자")
                 
-                col1, col2 = st.columns([1, 1])
+                col1, col2, col3 = st.columns([1, 1, 1])
                 with col1:
                     if st.button(f"🗑️ 삭제", key=f"delete_pdf_{i}"):
                         st.session_state.pdf_documents.pop(i)
@@ -292,6 +292,10 @@ with tab2:
                         st.rerun()
                 
                 with col2:
+                    if st.button(f"📖 내용 보기", key=f"view_pdf_{i}"):
+                        st.text_area("PDF 내용", pdf_doc['content'][:2000] + "..." if len(pdf_doc['content']) > 2000 else pdf_doc['content'], height=300)
+                
+                with col3:
                     if st.button(f"💬 질문하기", key=f"ask_pdf_{i}"):
                         st.session_state.selected_pdf_index = i
         
@@ -321,6 +325,116 @@ with tab2:
                     
                     st.subheader("🤖 답변")
                     st.write(answer)
+        
+        # 통합 검색 (모든 PDF에서 검색)
+        st.subheader("🔍 모든 PDF에서 검색")
+        search_query = st.text_input(
+            "모든 PDF에서 검색할 키워드를 입력하세요:",
+            placeholder="검색어를 입력하세요..."
+        )
+        
+        if st.button("🔍 검색", key="search_all_pdfs") and search_query:
+            with st.spinner("모든 PDF에서 검색하고 있습니다..."):
+                search_results = []
+                
+                # 검색어 전처리
+                processed_query = search_query.lower()
+                
+                # 질문 패턴 제거
+                question_patterns = [
+                    "중요 부분은?", "무엇인가?", "어떤가?", "뭐야?", "뭔가?",
+                    "설명해줘", "알려줘", "보여줘", "찾아줘", "검색해줘",
+                    "포함한", "포함된", "관련된", "관련한", "중요부분은?"
+                ]
+                
+                for pattern in question_patterns:
+                    processed_query = processed_query.replace(pattern, "").strip()
+                
+                # 파일명에서 확장자 제거
+                processed_query = processed_query.replace(".pdf", "").replace(".PDF", "")
+                
+                for pdf_doc in st.session_state.pdf_documents:
+                    # 1. 파일명에서 검색
+                    if processed_query.lower() in pdf_doc['name'].lower():
+                        search_results.append({
+                            "pdf_name": pdf_doc['name'],
+                            "context": f"파일명에서 '{processed_query}' 발견",
+                            "position": "파일명",
+                            "match_type": "파일명"
+                        })
+                        continue
+                    
+                    # 2. PDF 내용에서 검색
+                    if processed_query.lower() in pdf_doc['content'].lower():
+                        content_lower = pdf_doc['content'].lower()
+                        query_pos = content_lower.find(processed_query.lower())
+                        
+                        if query_pos != -1:
+                            start = max(0, query_pos - 150)
+                            end = min(len(pdf_doc['content']), query_pos + len(processed_query) + 150)
+                            context = pdf_doc['content'][start:end]
+                            
+                            search_results.append({
+                                "pdf_name": pdf_doc['name'],
+                                "context": context,
+                                "position": query_pos,
+                                "match_type": "내용"
+                            })
+                    
+                    # 3. 부분 매칭 (단어 단위)
+                    words = processed_query.split()
+                    for word in words:
+                        if len(word) > 1:
+                            if word.lower() in pdf_doc['name'].lower():
+                                search_results.append({
+                                    "pdf_name": pdf_doc['name'],
+                                    "context": f"파일명에서 '{word}' 발견",
+                                    "position": "파일명",
+                                    "match_type": f"파일명 단어 매칭 ('{word}')"
+                                })
+                                break
+                            
+                            if word.lower() in pdf_doc['content'].lower():
+                                content_lower = pdf_doc['content'].lower()
+                                word_pos = content_lower.find(word.lower())
+                                
+                                if word_pos != -1:
+                                    start = max(0, word_pos - 100)
+                                    end = min(len(pdf_doc['content']), word_pos + len(word) + 100)
+                                    context = pdf_doc['content'][start:end]
+                                    
+                                    search_results.append({
+                                        "pdf_name": pdf_doc['name'],
+                                        "context": context,
+                                        "position": word_pos,
+                                        "match_type": f"내용 단어 매칭 ('{word}')"
+                                    })
+                                    break
+                
+                if search_results:
+                    # 중복 제거
+                    unique_results = []
+                    seen_pdfs = set()
+                    
+                    for result in search_results:
+                        if result['pdf_name'] not in seen_pdfs:
+                            unique_results.append(result)
+                            seen_pdfs.add(result['pdf_name'])
+                    
+                    st.success(f"✅ {len(unique_results)}개의 PDF에서 관련 내용을 찾았습니다!")
+                    
+                    for result in unique_results:
+                        with st.expander(f"📄 {result['pdf_name']} ({result['match_type']})"):
+                            if result['match_type'] == "파일명":
+                                st.write(f"**매칭 유형:** {result['match_type']}")
+                                st.write(f"**발견 위치:** {result['context']}")
+                            else:
+                                st.write(f"**매칭 유형:** {result['match_type']}")
+                                st.write(f"**위치:** {result['position']}번째 문자")
+                                st.text_area("검색된 내용", result['context'], height=150)
+                else:
+                    st.warning(f"'{search_query}'와 관련된 PDF를 찾을 수 없습니다.")
+                    st.info("💡 팁: 파일명이나 내용의 일부만 입력해보세요.")
     else:
         st.info("아직 업로드된 PDF가 없습니다. PDF를 업로드해보세요!")
 
